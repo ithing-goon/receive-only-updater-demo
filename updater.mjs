@@ -3,6 +3,7 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 const HOME = dirname(fileURLToPath(import.meta.url));
 export const BASE = 'https://raw.githubusercontent.com/ithing-goon/receive-only-updater-demo/main/distribution/';
@@ -105,5 +106,16 @@ export async function receive({ root = HOME, get = getFile } = {}) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv.length !== 2) { console.error('Arguments are not accepted'); process.exitCode = 1; }
+  else if (!process.allowedNodeEnvironmentFlags.has('--use-system-ca')) {
+    console.error('This Node.js version does not support system certificates. Install an approved Node.js version with --use-system-ca support.');
+    process.exitCode = 1;
+  }
+  else if (!process.execArgv.includes('--use-system-ca')) {
+    // Relaunch this exact local program with the OS trust store; never disable TLS checks.
+    const child = spawnSync(process.execPath, ['--use-system-ca', fileURLToPath(import.meta.url)], { stdio: 'inherit', windowsHide: true });
+    if (child.error) console.error(child.error.message);
+    process.exitCode = child.status ?? 1;
+  }
   else receive().then(r => console.log(JSON.stringify(r, null, 2))).catch(e => { console.error(e.message); process.exitCode = 1; });
 }
+
