@@ -1,3 +1,50 @@
-# Read-only updater demo
+# Read-only GitHub file updater demo
 
-Synthetic data only. Implementation and validation follow.
+공개 테스트 코드와 `Hello World!`만 포함합니다. GitHub를 파일 배포 장소로 사용하며, 수신 PC는 Git이나 GitHub 토큰을 사용하지 않습니다. Node.js 22 이상이 필요합니다.
+
+## 실행
+
+수신용 패키지를 승인된 경로로 전달받아 별도 폴더에 풉니다. PowerShell에서 해당 폴더로 이동한 뒤:
+
+```powershell
+node updater.mjs
+```
+
+또는 `./Update.ps1`을 사용합니다. 실행 정책을 변경하거나 인증서 검증을 끄지 않습니다.
+
+고정된 `raw.githubusercontent.com/ithing-goon/receive-only-updater-demo/main/distribution/`에서 release.json과 서명에 지정된 해시 이름의 파일만 GET합니다. 실제 데이터는 요청 본문에 실리지 않습니다. 업로드, 외부 로그 전송, 쿠키, 토큰, 임의 URL, 리디렉션, 다른 경로 자동 재시도 기능은 없습니다. 403이면 중단합니다.
+
+## 검증 및 저장
+
+- 사전에 배포된 공개키로 Ed25519 서명을 확인하고, 출처·버전·만료·파일명·크기 정책을 검사합니다.
+- SHA-256과 크기가 일치한 데이터만 inbox에 저장합니다. 파일은 실행하거나 압축 해제하지 않습니다.
+- state.json에 반영 버전을 기록하여 이전 버전과 동일 버전의 다른 내용을 거부합니다.
+- 재실행 시 동일 버전의 로컬 파일을 다시 검증하고 already-current를 표시합니다.
+- 제한: 파일 16 MiB, 요청당 15초, 서명 유효기간 최대 7일.
+- 강제 종료로 inbox/.lock이 남으면 실행 중인 수신기가 없는지 확인한 후 해당 잠금 파일만 제거해야 합니다.
+
+## 외부 배포자
+
+prepare-release.mjs는 외부 전용 서명 도구이며 수신용 ZIP에는 포함하지 않습니다. 외부에서만 사용합니다:
+
+```text
+node prepare-release.mjs INPUT_FILE PRIVATE_KEY VERSION NEW_OUTPUT_DIRECTORY
+```
+
+생성된 두 파일을 distribution에 원자적으로 게시합니다. 버전은 증가시킵니다. 개인키는 저장소와 수신 PC에 넣지 않습니다. 현재 데모 개인키는 기존 외부 Ubuntu 서버에만 있습니다. 서명 도구 자체에는 네트워크나 Git 기능이 없습니다.
+
+## 보안 경계
+
+수신 코드에 업로드 기능이 없다는 것이 PC 전체의 외부 통신 금지를 뜻하지는 않습니다. OS 사용자/폴더 ACL 격리는 아직 적용하지 않았습니다. 코드·공개키·상태 파일의 로컬 변조와 상태 삭제를 막으려면 별도 권한 보호가 필요합니다. 기존 공개키가 포함된 패키지를 검증된 경로로 처음 배포해야 합니다.
+
+HTTPS는 전송을 보호하지만 배포 파일 자체는 암호화하지 않았습니다. 이 공개 저장소에는 실제 사내 자료를 올리지 않습니다. 실제 기밀 데이터는 별도 암호화/접근 제어 설계가 필요합니다.
+
+사내에서 허용된 파일 수신 경로에서만 사용합니다. 기존 Lightsail IP는 내부망에서 차단된 것으로 관찰됐으며, 이 GitHub 경로의 내부망 허용 여부는 확인되지 않았습니다. 차단 시 다른 포트·도메인·클라이언트로 자동 우회하지 않습니다.
+
+## 테스트
+
+```text
+node --test updater.test.mjs
+```
+
+서명/본문 변조, 잘못된 키, 만료, 경로·출처·크기 정책, 이전 버전, GET만 사용, HTTP 리디렉션/403/과대 응답 거부, 반복 수신과 실패 시 미저장을 검증합니다. 상세 실행 결과는 VALIDATION-v1.md에 기록합니다.
